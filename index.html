@@ -1,1 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Doom</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            color: #8b0000;
+        }
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 0 30px #8b0000;
+            border: 2px solid #333;
+        }
+        canvas {
+            display: block;
+            background-color: #000;
+        }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #8b0000;
+            font-size: 18px;
+            text-shadow: 0 0 5px #000;
+            z-index: 10;
+            font-weight: bold;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #8b0000;
+            font-size: 14px;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border: 1px solid #8b0000;
+            z-index: 10;
+        }
+        #title {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #8b0000;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #ff0000;
+            z-index: 10;
+            text-align: center;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff0000;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 0 0 20px #000;
+            z-index: 20;
+            display: none;
+            text-align: center;
+        }
+        #restartButton {
+            background-color: #8b0000;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        #restartButton:hover {
+            background-color: #ff0000;
+            color: #fff;
+        }
+        .ammo {
+            color: #ffd700;
+        }
+        .health {
+            color: #00ff00;
+        }
+        .enemies {
+            color: #ff4500;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="title">HTML DOOM</div>
+        <div id="hud">
+            <div>HEALTH: <span id="health" class="health">100</span></div>
+            <div>AMMO: <span id="ammo" class="ammo">50</span></div>
+            <div>ENEMIES: <span id="enemies" class="enemies">5</span></div>
+            <div>SCORE: <span id="score">0</span></div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="controls">
+            W/A/S/D to move | Mouse to aim | Click to shoot | R to restart
+        </div>
+        <div id="gameOver">
+            GAME OVER<br>
+            <button id="restartButton">RIP AND TEAR AGAIN</button>
+        </div>
+    </div>
 
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameOverScreen = document.getElementById('gameOver');
+        const restartButton = document.getElementById('restartButton');
+        
+        // Set canvas size
+        canvas.width = 800;
+        canvas.height = 600;
+        
+        // Player properties
+        let player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            angle: 0,
+            speed: 3,
+            health: 100,
+            ammo: 50,
+            isMoving: false,
+            moveForward: false,
+            moveBackward: false,
+            rotateLeft: false,
+            rotateRight: false
+        };
+        
+        // Game state
+        let enemies = [];
+        let bullets = [];
+        let particles = [];
+        let walls = [];
+        let score = 0;
+        let gameRunning = true;
+        let lastTime = 0;
+        
+        // Initialize walls for the level
+        function initWalls() {
+            walls = [];
+            // Outer walls
+            walls.push({x: 50, y: 50, width: canvas.width - 100, height: 20});
+            walls.push({x: 50, y: canvas.height - 70, width: canvas.width - 100, height: 20});
+            walls.push({x: 50, y: 50, width: 20, height: canvas.height - 100});
+            walls.push({x: canvas.width - 70, y: 50, width: 20, height: canvas.height - 100});
+            
+            // Inner walls
+            walls.push({x: 200, y: 150, width: 20, height: 200});
+            walls.push({x: 400, y: 100, width: 20, height: 300});
+            walls.push({x: 600, y: 150, width: 20, height: 200});
+            walls.push({x: 300, y: 400, width: 200, height: 20});
+        }
+        
+        // Initialize enemies
+        function initEnemies() {
+            enemies = [];
+            for (let i = 0; i < 5; i++) {
+                enemies.push({
+                    x: 100 + Math.random() * (canvas.width - 200),
+                    y: 100 + Math.random() * (canvas.height - 200),
+                    size: 20,
+                    speed: 1 + Math.random() * 1.5,
+                    health: 3,
+                    color: `hsl(${Math.random() * 60}, 100%, 50%)`,
+                    lastShot: 0,
+                    shootDelay: 1000 + Math.random() * 2000
+                });
+            }
+        }
+        
+        // Initialize game
+        function initGame() {
+            player = {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                angle: 0,
+                speed: 3,
+                health: 100,
+                ammo: 50,
+                isMoving: false,
+                moveForward: false,
+                moveBackward: false,
+                rotateLeft: false,
+                rotateRight: false
+            };
+            
+            bullets = [];
+            particles = [];
+            score = 0;
+            gameRunning = true;
+            gameOverScreen.style.display = 'none';
+            
+            initWalls();
+            initEnemies();
+            
+            updateHUD();
+        }
+        
+        // Update HUD
+        function updateHUD() {
+            document.getElementById('health').textContent = player.health;
+            document.getElementById('ammo').textContent = player.ammo;
+            document.getElementById('enemies').textContent = enemies.length;
+            document.getElementById('score').textContent = score;
+        }
+        
+        // Draw player
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.angle);
+            
+            // Player body
+            ctx.fillStyle = '#8b0000';
+            ctx.fillRect(-10, -10, 20, 20);
+            
+            // Player direction indicator
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(5, -3, 15, 6);
+            
+            // Player "face"
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-8, -5, 5, 10);
+            
+            ctx.restore();
+        }
+        
+        // Draw walls
+        function drawWalls() {
+            ctx.fillStyle = '#555';
+            walls.forEach(wall => {
+                ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+                
+                // Add texture
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(wall.x, wall.y, wall.width, wall.height);
+            });
+        }
+        
+        // Draw enemies
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                // Enemy body
+                ctx.fillStyle = enemy.color;
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Enemy details
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(enemy.x - 5, enemy.y - 5, 4, 0, Math.PI * 2);
+                ctx.arc(enemy.x + 5, enemy.y - 5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Enemy health bar
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(enemy.x - 15, enemy.y - 25, 30, 5);
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(enemy.x - 15, enemy.y - 25, (enemy.health / 3) * 30, 5);
+            });
+        }
+        
+        // Draw bullets
+        function drawBullets() {
+            bullets.forEach(bullet => {
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        // Draw particles
+        function drawParticles() {
+            particles.forEach(particle => {
+                ctx.globalAlpha = particle.life / 100;
+                ctx.fillStyle = particle.color;
+                ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
+                ctx.globalAlpha = 1;
+            });
+        }
+        
+        // Draw raycasting-style 3D effect
+        function draw3DEffect() {
+            const fov = Math.PI / 3;
+            const rayCount = 60;
+            const rayAngleStep = fov / rayCount;
+            
+            // Draw ceiling
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+            
+            // Draw floor
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+            
+            // Draw rays
+            for (let i = 0; i < rayCount; i++) {
+                const rayAngle = player.angle - fov / 2 + i * rayAngleStep;
+                const rayLength = 300;
+                
+                // Calculate ray end point
+                const rayEndX = player.x + Math.cos(rayAngle) * rayLength;
+                const rayEndY = player.y + Math.sin(rayAngle) * rayLength;
+                
+                // Check for wall collisions
+                let wallHit = false;
+                let hitDistance = rayLength;
+                
+                walls.forEach(wall => {
+                    const intersection = lineRectIntersection(
+                        player.x, player.y, rayEndX, rayEndY,
+                        wall.x, wall.y, wall.width, wall.height
+                    );
+                    
+                    if (intersection) {
+                        const distance = Math.sqrt(
+                            Math.pow(intersection.x - player.x, 2) + 
+                            Math.pow(intersection.y - player.y, 2)
+                        );
+                        
+                        if (distance < hitDistance) {
+                            hitDistance = distance;
+                            wallHit = true;
+                        }
+                    }
+                });
+                
+                // Draw ray
+                if (wallHit) {
+                    // Draw wall slice
+                    const wallHeight = (canvas.height * 100) / hitDistance;
+                    const wallBrightness = Math.max(100, 255 - hitDistance);
+                    
+                    ctx.fillStyle = `rgb(${wallBrightness * 0.3}, ${wallBrightness * 0.1}, ${wallBrightness * 0.1})`;
+                    ctx.fillRect(
+                        i * (canvas.width / rayCount),
+                        canvas.height / 2 - wallHeight / 2,
+                        canvas.width / rayCount + 1,
+                        wallHeight
+                    );
+                }
+            }
+        }
+        
+        // Line-rectangle intersection helper
+        function lineRectIntersection(x1, y1, x2, y2, rx, ry, rw, rh) {
+            // Check each side of the rectangle
+            const sides = [
+                {x1: rx, y1: ry, x2: rx + rw, y2: ry}, // top
+                {x1: rx + rw, y1: ry, x2: rx + rw, y2: ry + rh}, // right
+                {x1: rx + rw, y1: ry + rh, x2: rx, y2: ry + rh}, // bottom
+                {x1: rx, y1: ry + rh, x2: rx, y2: ry} // left
+            ];
+            
+            let closestIntersection = null;
+            let closestDistance = Infinity;
+            
+            sides.forEach(side => {
+                const intersection = lineLineIntersection(
+                    x1, y1, x2, y2,
+                    side.x1, side.y1, side.x2, side.y2
+                );
+                
+                if (intersection) {
+                    const distance = Math.sqrt(
+                        Math.pow(intersection.x - x1, 2) + 
+                        Math.pow(intersection.y - y1, 2)
+                    );
+                    
+                    if (distance < closestDistance) {
+                        closestDistance = distance;
+                        closestIntersection = intersection;
+                    }
+                }
+            });
+            
+            return closestIntersection;
+        }
+        
+        // Line-line intersection helper
+        function lineLineIntersection(x1, y1, x2, y2, x3, y3, x4, y4) {
+            const denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+            
+            if (denominator === 0) return null;
+            
+            const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+            const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+            
+            if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+                return {
+                    x: x1 + t * (x2 - x1),
+                    y: y1 + t * (y2 - y1)
+                };
+            }
+            
+            return null;
+        }
+        
+        // Update player position
+        function updatePlayer() {
+            // Rotate player
+            if (player.rotateLeft) player.angle -= 0.05;
+            if (player.rotateRight) player.angle += 0.05;
+            
+            // Calculate movement
+            let moveX = 0;
+            let moveY = 0;
+            
+            if (player.moveForward) {
+                moveX += Math.cos(player.angle) * player.speed;
+                moveY += Math.sin(player.angle) * player.speed;
+            }
+            if (player.moveBackward) {
+                moveX -= Math.cos(player.angle) * player.speed;
+                moveY -= Math.sin(player.angle) * player.speed;
+            }
+            
+            // Check wall collisions
+            const newX = player.x + moveX;
+            const newY = player.y + moveY;
+            
+            let canMoveX = true;
+            let canMoveY = true;
+            
+            // Create player bounding box
+            const playerBox = {
+                x: newX - 10,
+                y: player.y - 10,
+                width: 20,
+                height: 20
+            };
+            
+            walls.forEach(wall => {
+                if (rectIntersect(playerBox, wall)) {
+                    canMoveX = false;
+                }
+            });
+            
+            playerBox.x = player.x - 10;
+            playerBox.y = newY - 10;
+            
+            walls.forEach(wall => {
+                if (rectIntersect(playerBox, wall)) {
+                    canMoveY = false;
+                }
+            });
+            
+            // Apply movement
+            if (canMoveX) player.x = newX;
+            if (canMoveY) player.y = newY;
+            
+            // Keep player in bounds
+            player.x = Math.max(30, Math.min(canvas.width - 30, player.x));
+            player.y = Math.max(30, Math.min(canvas.height - 30, player.y));
+        }
+        
+        // Rectangle intersection helper
+        function rectIntersect(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+        
+        // Update enemies
+        function updateEnemies(deltaTime) {
+            enemies.forEach((enemy, enemyIndex) => {
+                // Move enemy towards player
+                const angleToPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                enemy.x += Math.cos(angleToPlayer) * enemy.speed;
+                enemy.y += Math.sin(angleToPlayer) * enemy.speed;
+                
+                // Check wall collisions for enemy
+                const enemyBox = {
+                    x: enemy.x - enemy.size,
+                    y: enemy.y - enemy.size,
+                    width: enemy.size * 2,
+                    height: enemy.size * 2
+                };
+                
+                walls.forEach(wall => {
+                    if (rectIntersect(enemyBox, wall)) {
+                        // Push enemy away from wall
+                        const enemyCenterX = enemy.x;
+                        const enemyCenterY = enemy.y;
+                        const wallCenterX = wall.x + wall.width / 2;
+                        const wallCenterY = wall.y + wall.height / 2;
+                        
+                        const pushAngle = Math.atan2(enemyCenterY - wallCenterY, enemyCenterX - wallCenterX);
+                        enemy.x += Math.cos(pushAngle) * 2;
+                        enemy.y += Math.sin(pushAngle) * 2;
+                    }
+                });
+                
+                // Enemy shooting
+                enemy.lastShot += deltaTime;
+                if (enemy.lastShot >= enemy.shootDelay) {
+                    enemy.lastShot = 0;
+                    
+                    // Create enemy bullet
+                    const bulletAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                    bullets.push({
+                        x: enemy.x,
+                        y: enemy.y,
+                        angle: bulletAngle,
+                        speed: 5,
+                        damage: 10,
+                        isPlayerBullet: false
+                    });
+                }
+                
+                // Enemy-player collision
+                const distanceToPlayer = Math.sqrt(
+                    Math.pow(player.x - enemy.x, 2) + 
+                    Math.pow(player.y - enemy.y, 2)
+                );
+                
+                if (distanceToPlayer < 20) {
+                    player.health -= 0.1;
+                    updateHUD();
+                }
+            });
+        }
+        
+        // Update bullets
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                // Move bullet
+                bullet.x += Math.cos(bullet.angle) * bullet.speed;
+                bullet.y += Math.sin(bullet.angle) * bullet.speed;
+                
+                // Check bullet collision with walls
+                let hitWall = false;
+                walls.forEach(wall => {
+                    if (bullet.x > wall.x && bullet.x < wall.x + wall.width &&
+                        bullet.y > wall.y && bullet.y < wall.y + wall.height) {
+                        hitWall = true;
+                        
+                        // Create particle effect
+                        for (let j = 0; j < 5; j++) {
+                            particles.push({
+                                x: bullet.x,
+                                y: bullet.y,
+                                size: 2 + Math.random() * 4,
+                                color: '#ffd700',
+                                life: 100,
+                                vx: (Math.random() - 0.5) * 5,
+                                vy: (Math.random() - 0.5) * 5
+                            });
+                        }
+                    }
+                });
+                
+                // Check bullet collision with enemies (if player bullet)
+                if (bullet.isPlayerBullet) {
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const enemy = enemies[j];
+                        const distance = Math.sqrt(
+                            Math.pow(bullet.x - enemy.x, 2) + 
+                            Math.pow(bullet.y - enemy.y, 2)
+                        );
+                        
+                        if (distance < enemy.size) {
+                            enemy.health--;
+                            
+                            // Create blood particles
+                            for (let k = 0; k < 8; k++) {
+                                particles.push({
+                                    x: bullet.x,
+                                    y: bullet.y,
+                                    size: 3 + Math.random() * 4,
+                                    color: '#ff0000',
+                                    life: 100,
+                                    vx: (Math.random() - 0.5) * 6,
+                                    vy: (Math.random() - 0.5) * 6
+                                });
+                            }
+                            
+                            // Remove bullet
+                            bullets.splice(i, 1);
+                            
+                            // Check if enemy is dead
+                            if (enemy.health <= 0) {
+                                enemies.splice(j, 1);
+                                score += 100;
+                                updateHUD();
+                                
+                                // Chance to drop ammo
+                                if (Math.random() < 0.3) {
+                                    player.ammo += 10;
+                                    updateHUD();
+                                }
+                            }
+                            
+                            break;
+                        }
+                    }
+                } else {
+                    // Check bullet collision with player (if enemy bullet)
+                    const distanceToPlayer = Math.sqrt(
+                        Math.pow(bullet.x - player.x, 2) + 
+                        Math.pow(bullet.y - player.y, 2)
+                    );
+                    
+                    if (distanceToPlayer < 15) {
+                        player.health -= bullet.damage;
+                        updateHUD();
+                        
+                        // Create hit particles
+                        for (let j = 0; j < 5; j++) {
+                            particles.push({
+                                x: bullet.x,
+                                y: bullet.y,
+                                size: 2 + Math.random() * 4,
+                                color: '#ff0000',
+                                life: 100,
+                                vx: (Math.random() - 0.5) * 5,
+                                vy: (Math.random() - 0.5) * 5
+                            });
+                        }
+                        
+                        bullets.splice(i, 1);
+                        
+                        // Check if player is dead
+                        if (player.health <= 0) {
+                            gameRunning = false;
+                            gameOverScreen.style.display = 'block';
+                        }
+                    }
+                }
+                
+                // Remove bullet if it hits a wall or goes out of bounds
+                if (hitWall || 
+                    bullet.x < 0 || bullet.x > canvas.width || 
+                    bullet.y < 0 || bullet.y > canvas.height) {
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+        
+        // Update particles
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const particle = particles[i];
+                
+                // Move particle
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+                
+                // Apply gravity
+                particle.vy += 0.1;
+                
+                // Reduce particle life
+                particle.life -= 2;
+                
+                // Remove dead particles
+                if (particle.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        // Draw the game
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw 3D effect
+            draw3DEffect();
+            
+            // Draw game objects
+            drawWalls();
+            drawEnemies();
+            drawBullets();
+            drawParticles();
+            drawPlayer();
+        }
+        
+        // Game loop
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            if (gameRunning) {
+                // Update game state
+                updatePlayer();
+                updateEnemies(deltaTime);
+                updateBullets();
+                updateParticles();
+                
+                // Check if player won
+                if (enemies.length === 0) {
+                    // Spawn more enemies
+                    for (let i = 0; i < 3; i++) {
+                        enemies.push({
+                            x: 100 + Math.random() * (canvas.width - 200),
+                            y: 100 + Math.random() * (canvas.height - 200),
+                            size: 20,
+                            speed: 1 + Math.random() * 1.5,
+                            health: 3,
+                            color: `hsl(${Math.random() * 60}, 100%, 50%)`,
+                            lastShot: 0,
+                            shootDelay: 1000 + Math.random() * 2000
+                        });
+                    }
+                    updateHUD();
+                }
+                
+                // Draw everything
+                draw();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'w':
+                    player.moveForward = true;
+                    break;
+                case 's':
+                    player.moveBackward = true;
+                    break;
+                case 'a':
+                    player.rotateLeft = true;
+                    break;
+                case 'd':
+                    player.rotateRight = true;
+                    break;
+                case 'r':
+                    if (!gameRunning) initGame();
+                    break;
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'w':
+                    player.moveForward = false;
+                    break;
+                case 's':
+                    player.moveBackward = false;
+                    break;
+                case 'a':
+                    player.rotateLeft = false;
+                    break;
+                case 'd':
+                    player.rotateRight = false;
+                    break;
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!gameRunning) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Calculate angle from player to mouse
+            player.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+        });
+        
+        canvas.addEventListener('click', () => {
+            if (!gameRunning || player.ammo <= 0) return;
+            
+            // Create bullet
+            bullets.push({
+                x: player.x,
+                y: player.y,
+                angle: player.angle,
+                speed: 7,
+                damage: 1,
+                isPlayerBullet: true
+            });
+            
+            // Reduce ammo
+            player.ammo--;
+            updateHUD();
+            
+            // Create muzzle flash particles
+            for (let i = 0; i < 5; i++) {
+                particles.push({
+                    x: player.x + Math.cos(player.angle) * 15,
+                    y: player.y + Math.sin(player.angle) * 15,
+                    size: 2 + Math.random() * 3,
+                    color: '#ffd700',
+                    life: 30,
+                    vx: Math.cos(player.angle) * 5 + (Math.random() - 0.5) * 2,
+                    vy: Math.sin(player.angle) * 5 + (Math.random() - 0.5) * 2
+                });
+            }
+        });
+        
+        restartButton.addEventListener('click', initGame);
+        
+        // Initialize and start the game
+        initGame();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
